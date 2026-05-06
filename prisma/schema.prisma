@@ -1,0 +1,271 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+/// --- ENUMS ---
+
+enum UserRole {
+  SUPER_ADMIN
+  SCHOOL_ADMIN
+  TEACHER
+  STUDENT
+  PARENT
+}
+
+enum Status {
+  ACTIVE
+  INACTIVE
+}
+
+enum AttendanceStatus {
+  PRESENT
+  ABSENT
+  LATE
+}
+
+enum FeeFrequency {
+  MONTHLY
+  TERMLY
+  YEARLY
+}
+
+enum InvoiceStatus {
+  UNPAID
+  PARTIAL
+  PAID
+}
+
+/// --- MODELS ---
+
+model School {
+  id         Int    @id @default(autoincrement())
+  name       String
+  slug       String @unique
+  email      String
+  phone      String
+  logo_url   String?
+  status     Status @default(ACTIVE)
+
+  users      User[]
+  students   Student[]
+  teachers   Teacher[]
+  classes    Class[]
+  attendance Attendance[]
+  fees       Fee[]
+  invoices   Invoice[]
+  sections   Section[]
+  subjects   Subject[]
+  exams      Exam[]
+  results    Result[]
+  notices    Notice[]
+
+  @@map("schools")
+}
+
+model User {
+  id               Int       @id @default(autoincrement())
+  school_id        Int?
+  name             String
+  email            String    @unique
+  password         String
+  role             UserRole
+  status           Status    @default(ACTIVE)
+
+  school           School?   @relation(fields: [school_id], references: [id])
+  teachers         Teacher[]
+  marked_attendance Attendance[]
+  wards            Student[] @relation("StudentGuardian")
+  student_profile  Student?  @relation("StudentUserAccount")
+
+  @@map("users")
+}
+
+model Student {
+  id           Int    @id @default(autoincrement())
+  school_id    Int
+  user_id      Int?   @unique
+  admission_no String @unique
+  first_name   String
+  last_name    String
+  dob          DateTime
+  class_id     Int
+  section_id   Int
+  guardian_id  Int
+
+  school     School       @relation(fields: [school_id], references: [id])
+  user       User?        @relation("StudentUserAccount", fields: [user_id], references: [id])
+  class      Class        @relation(fields: [class_id], references: [id])
+  section    Section      @relation(fields: [section_id], references: [id])
+  guardian   User         @relation("StudentGuardian", fields: [guardian_id], references: [id])
+  attendance Attendance[]
+  invoices   Invoice[]
+  results    Result[]
+
+  @@map("students")
+}
+
+model Teacher {
+  id        Int    @id @default(autoincrement())
+  school_id Int
+  user_id   Int
+  name      String
+  email     String
+  phone     String
+
+  school School @relation(fields: [school_id], references: [id])
+  user   User   @relation(fields: [user_id], references: [id])
+
+  @@map("teachers")
+}
+
+model Class {
+  id         Int    @id @default(autoincrement())
+  school_id  Int
+  name       String
+
+  school         School         @relation(fields: [school_id], references: [id])
+  students       Student[]
+  attendance     Attendance[]
+  fees           Fee[]
+  sections       Section[]
+  class_subjects ClassSubject[]
+  exams          Exam[]
+
+  @@map("classes")
+}
+
+model Section {
+  id        Int    @id @default(autoincrement())
+  school_id Int
+  class_id  Int
+  name      String
+
+  school   School    @relation(fields: [school_id], references: [id])
+  class    Class     @relation(fields: [class_id], references: [id])
+  students Student[]
+
+  @@map("sections")
+}
+
+model Subject {
+  id        Int    @id @default(autoincrement())
+  school_id Int
+  name      String
+  code      String?
+
+  school         School         @relation(fields: [school_id], references: [id])
+  class_subjects ClassSubject[]
+  exams          Exam[]
+
+  @@map("subjects")
+}
+
+model ClassSubject {
+  id         Int @id @default(autoincrement())
+  class_id   Int
+  subject_id Int
+
+  class   Class   @relation(fields: [class_id], references: [id])
+  subject Subject @relation(fields: [subject_id], references: [id])
+
+  @@unique([class_id, subject_id])
+  @@map("class_subjects")
+}
+
+model Exam {
+  id         Int       @id @default(autoincrement())
+  school_id  Int
+  class_id   Int
+  subject_id Int
+  title      String
+  term       String?
+  exam_date  DateTime?
+
+  school  School  @relation(fields: [school_id], references: [id])
+  class   Class   @relation(fields: [class_id], references: [id])
+  subject Subject @relation(fields: [subject_id], references: [id])
+  results Result[]
+
+  @@map("exams")
+}
+
+model Result {
+  id              Int      @id @default(autoincrement())
+  school_id       Int
+  exam_id         Int
+  student_id      Int
+  marks_obtained  Decimal? @db.Decimal(10, 2)
+  max_marks       Decimal  @db.Decimal(10, 2)
+  grade           String?
+
+  school  School  @relation(fields: [school_id], references: [id])
+  exam    Exam    @relation(fields: [exam_id], references: [id])
+  student Student @relation(fields: [student_id], references: [id])
+
+  @@unique([exam_id, student_id])
+  @@map("results")
+}
+
+model Notice {
+  id           Int      @id @default(autoincrement())
+  school_id    Int
+  title        String
+  body         String
+  published_at DateTime @default(now())
+
+  school School @relation(fields: [school_id], references: [id])
+
+  @@map("notices")
+}
+
+model Attendance {
+  id         Int              @id @default(autoincrement())
+  school_id  Int
+  student_id Int
+  class_id   Int
+  date       DateTime
+  status     AttendanceStatus
+  marked_by  Int
+
+  school  School  @relation(fields: [school_id], references: [id])
+  student Student @relation(fields: [student_id], references: [id])
+  class   Class   @relation(fields: [class_id], references: [id])
+  marker  User    @relation(fields: [marked_by], references: [id])
+
+  @@map("attendance")
+}
+
+model Fee {
+  id         Int          @id @default(autoincrement())
+  school_id  Int
+  name       String
+  amount     Decimal      @db.Decimal(10, 2)
+  class_id   Int
+  frequency  FeeFrequency
+
+  school   School    @relation(fields: [school_id], references: [id])
+  class    Class     @relation(fields: [class_id], references: [id])
+  invoices Invoice[]
+
+  @@map("fees")
+}
+
+model Invoice {
+  id         Int           @id @default(autoincrement())
+  school_id  Int
+  student_id Int
+  fee_id     Int
+  amount     Decimal       @db.Decimal(10, 2)
+  due_date   DateTime
+  status     InvoiceStatus
+
+  school  School  @relation(fields: [school_id], references: [id])
+  student Student @relation(fields: [student_id], references: [id])
+  fee     Fee     @relation(fields: [fee_id], references: [id])
+
+  @@map("invoices")
+}
